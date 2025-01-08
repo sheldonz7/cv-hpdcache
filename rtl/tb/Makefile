@@ -31,6 +31,15 @@ ifndef SYSTEMC_LIBDIR
 $(error "SYSTEMC_LIBDIR not defined")
 endif
 
+# ifndef SYSTEMC_INCLUDE
+# $(error "SYSTEMC_INCLUDE not defined")
+# endif
+
+# ifndef SCV_HOME
+# $(error "SCV_HOME not defined")
+# endif
+
+
 VERILATOR           ?= verilator
 VERILATOR_COV       ?= verilator_coverage
 TOUCH               := touch
@@ -81,10 +90,12 @@ USER_CPPFLAGS       += -I$(TB_DIR) \
                        -I$(TB_DIR)/sc_verif_lib/include \
                        -I$(TB_DIR)/sc_verif_lib/modules/generic_cache/include \
                        -I$(TB_DIR)/sc_verif_lib/modules/mem_model/include \
-                       -DDEBUG_HPDCACHE_TEST_SCOREBOARD=1 \
+                       -I$(SCV_HOME)/include \
+					   -DDEBUG_HPDCACHE_TEST_SCOREBOARD=1 \
                        -DDEBUG_HPDCACHE_TEST_MEM_RESP_MODEL=1 \
                        $(if $(filter 1,$(DEBUG)),-DDEBUG) \
                        $(CONF_DEFINES)
+
 
 VERILATOR_FLAGS     += -Wall -Wno-fatal -O3 -I$(HPDCACHE_DIR)/rtl/src \
                        --x-assign fast --x-initial fast \
@@ -107,7 +118,7 @@ VERILATOR_FLAGS     += -Wall -Wno-fatal -O3 -I$(HPDCACHE_DIR)/rtl/src \
                        $(CONF_DEFINES)
 
 VERILATOR_MAKEFLAGS += USER_CPPFLAGS="$(USER_CPPFLAGS)" \
-                       USER_LDFLAGS="-Wl,-rpath,$(SYSTEMC_LIBDIR)" \
+                       USER_LDFLAGS="-Wl,-rpath,$(SYSTEMC_LIBDIR):$(SCV_LIBDIR) -L$(SCV_LIBDIR)" \
                        USER_LDLIBS="-lscv"
 
 VERILATOR_RUNFLAGS  += +verilator+seed+$(SEED) \

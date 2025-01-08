@@ -164,7 +164,6 @@ import hpdcache_pkg::*;
     //      }}}
 );
     //  }}}
-
     //  Definition of constants and types
     //  {{{
     localparam int unsigned HPDCACHE_DIR_RAM_WIDTH = $bits(hpdcache_dir_entry_t);
@@ -209,7 +208,6 @@ import hpdcache_pkg::*;
           [HPDCACHE_DATA_RAM_X_CUTS-1:0]
           hpdcache_data_addr_t;
     //  }}}
-
     //  Definition of functions
     //  {{{
 
@@ -231,10 +229,14 @@ import hpdcache_pkg::*;
             3'h0,
             3'h1,
             3'h2,
-            3'h3:    ret = hpdcache_data_row_enable_t'({ 64/HPDcacheCfg.u.wordWidth{1'b1}});
+            3'h3:    ret = hpdcache_data_row_enable_t'({64/HPDcacheCfg.u.wordWidth{1'b1}});
             3'h4:    ret = hpdcache_data_row_enable_t'({128/HPDcacheCfg.u.wordWidth{1'b1}});
             3'h5:    ret = hpdcache_data_row_enable_t'({256/HPDcacheCfg.u.wordWidth{1'b1}});
             default: ret = hpdcache_data_row_enable_t'({512/HPDcacheCfg.u.wordWidth{1'b1}});
+            3'h3:    ret = hpdcache_data_row_enable_t'({`UP(64/HPDcacheCfg.u.wordWidth){1'b1}});
+            3'h4:    ret = hpdcache_data_row_enable_t'({`UP(128/HPDcacheCfg.u.wordWidth){1'b1}});
+            3'h5:    ret = hpdcache_data_row_enable_t'({`UP(256/HPDcacheCfg.u.wordWidth){1'b1}});
+            default: ret = hpdcache_data_row_enable_t'({`UP(512/HPDcacheCfg.u.wordWidth){1'b1}});
         endcase
 
         off = HPDcacheCfg.u.accessWords > 1 ? hpdcache_uint'(word_i[0 +: OffWidth]) : 0;
