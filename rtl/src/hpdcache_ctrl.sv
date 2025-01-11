@@ -202,21 +202,34 @@ import hpdcache_pkg::*;
     output hpdcache_cmoh_op_t     cmo_req_op_o,
     output hpdcache_req_addr_t    cmo_req_addr_o,
     output hpdcache_req_data_t    cmo_req_wdata_o,
+    output hpdcache_req_sid_t     cmo_req_sid_o,
+    output hpdcache_req_tid_t     cmo_req_tid_o,
+    output logic                  cmo_req_need_rsp_o,
     input  logic                  cmo_wbuf_flush_all_i,
     input  logic                  cmo_dir_check_nline_i,
     input  hpdcache_set_t         cmo_dir_check_nline_set_i,
     input  hpdcache_tag_t         cmo_dir_check_nline_tag_i,
     output hpdcache_way_vector_t  cmo_dir_check_nline_hit_way_o,
+    output logic                  cmo_dir_check_nline_wback_o,
     output logic                  cmo_dir_check_nline_dirty_o,
     input  logic                  cmo_dir_check_entry_i,
     input  hpdcache_set_t         cmo_dir_check_entry_set_i,
     input  hpdcache_way_vector_t  cmo_dir_check_entry_way_i,
     output logic                  cmo_dir_check_entry_valid_o,
+    output logic                  cmo_dir_check_entry_wback_o,
     output logic                  cmo_dir_check_entry_dirty_o,
     output hpdcache_tag_t         cmo_dir_check_entry_tag_o,
-    input  logic                  cmo_dir_inval_i,
-    input  hpdcache_set_t         cmo_dir_inval_set_i,
-    input  hpdcache_way_vector_t  cmo_dir_inval_way_i,
+    input  logic                  cmo_dir_updt_i,
+    input  hpdcache_set_t         cmo_dir_updt_set_i,
+    input  hpdcache_way_vector_t  cmo_dir_updt_way_i,
+    input  logic                  cmo_dir_updt_valid_i,
+    input  logic                  cmo_dir_updt_wback_i,
+    input  logic                  cmo_dir_updt_dirty_i,
+    input  logic                  cmo_dir_updt_fetch_i,
+    input  hpdcache_tag_t         cmo_dir_updt_tag_i,
+    output logic                  cmo_core_rsp_ready_o,
+    input  logic                  cmo_core_rsp_valid_i,
+    input  hpdcache_rsp_t         cmo_core_rsp_i,
 
     output logic                  rtab_empty_o,
     output logic                  ctrl_empty_o,
@@ -620,6 +633,7 @@ import hpdcache_pkg::*;
         .cmo_busy_i,
         .cmo_wait_i,
         .cmo_req_valid_o,
+        .cmo_core_rsp_ready_o,
 
         .cfg_prefetch_updt_plru_i,
         .cfg_default_wb_i,
@@ -881,18 +895,25 @@ import hpdcache_pkg::*;
         .dir_cmo_check_nline_set_i     (cmo_dir_check_nline_set_i),
         .dir_cmo_check_nline_tag_i     (cmo_dir_check_nline_tag_i),
         .dir_cmo_check_nline_hit_way_o (cmo_dir_check_nline_hit_way_o),
+        .dir_cmo_check_nline_wback_o   (cmo_dir_check_nline_wback_o),
         .dir_cmo_check_nline_dirty_o   (cmo_dir_check_nline_dirty_o),
 
         .dir_cmo_check_entry_i         (cmo_dir_check_entry_i),
         .dir_cmo_check_entry_set_i     (cmo_dir_check_entry_set_i),
         .dir_cmo_check_entry_way_i     (cmo_dir_check_entry_way_i),
         .dir_cmo_check_entry_valid_o   (cmo_dir_check_entry_valid_o),
+        .dir_cmo_check_entry_wback_o   (cmo_dir_check_entry_wback_o),
         .dir_cmo_check_entry_dirty_o   (cmo_dir_check_entry_dirty_o),
         .dir_cmo_check_entry_tag_o     (cmo_dir_check_entry_tag_o),
 
-        .dir_cmo_inval_i               (cmo_dir_inval_i),
-        .dir_cmo_inval_set_i           (cmo_dir_inval_set_i),
-        .dir_cmo_inval_way_i           (cmo_dir_inval_way_i),
+        .dir_cmo_updt_i                (cmo_dir_updt_i),
+        .dir_cmo_updt_set_i            (cmo_dir_updt_set_i),
+        .dir_cmo_updt_way_i            (cmo_dir_updt_way_i),
+        .dir_cmo_updt_tag_i            (cmo_dir_updt_tag_i),
+        .dir_cmo_updt_valid_i          (cmo_dir_updt_valid_i),
+        .dir_cmo_updt_wback_i          (cmo_dir_updt_wback_i),
+        .dir_cmo_updt_dirty_i          (cmo_dir_updt_dirty_i),
+        .dir_cmo_updt_fetch_i          (cmo_dir_updt_fetch_i),
 
         .data_req_read_i               (st0_req_cachedata_read),
         .data_req_read_set_i           (st0_req_set),
@@ -991,6 +1012,9 @@ import hpdcache_pkg::*;
     //  {{{
     assign cmo_req_addr_o                       = st1_req_addr;
     assign cmo_req_wdata_o                      = st1_req.wdata;
+    assign cmo_req_sid_o                        = st1_req.sid;
+    assign cmo_req_tid_o                        = st1_req.tid;
+    assign cmo_req_need_rsp_o                   = st1_req.need_rsp;
     assign cmo_req_op_o.is_fence                = st1_req_is_cmo_fence;
     assign cmo_req_op_o.is_inval_by_nline       = st1_req_is_cmo_inval &
                                                   is_cmo_inval_by_nline(st1_req.op);
@@ -1018,15 +1042,20 @@ import hpdcache_pkg::*;
     //  {{{
     assign core_rsp_valid_o   = refill_core_rsp_valid_i |
                                 (uc_core_rsp_valid_i & uc_core_rsp_ready_o) |
+                                (cmo_core_rsp_valid_i & cmo_core_rsp_ready_o) |
                                 st1_rsp_valid;
     assign core_rsp_o.rdata   = (refill_core_rsp_valid_i ? refill_core_rsp_i.rdata :
-                                (uc_core_rsp_valid_i     ? uc_core_rsp_i.rdata : st1_read_data));
+                                (cmo_core_rsp_valid_i    ? cmo_core_rsp_i.rdata :
+                                (uc_core_rsp_valid_i     ? uc_core_rsp_i.rdata : st1_read_data)));
     assign core_rsp_o.sid     = (refill_core_rsp_valid_i ? refill_core_rsp_i.sid :
-                                (uc_core_rsp_valid_i     ? uc_core_rsp_i.sid : st1_req.sid));
+                                (cmo_core_rsp_valid_i    ? cmo_core_rsp_i.sid :
+                                (uc_core_rsp_valid_i     ? uc_core_rsp_i.sid : st1_req.sid)));
     assign core_rsp_o.tid     = (refill_core_rsp_valid_i ? refill_core_rsp_i.tid :
-                                (uc_core_rsp_valid_i     ? uc_core_rsp_i.tid : st1_req.tid));
+                                (cmo_core_rsp_valid_i    ? cmo_core_rsp_i.tid :
+                                (uc_core_rsp_valid_i     ? uc_core_rsp_i.tid : st1_req.tid)));
     assign core_rsp_o.error   = (refill_core_rsp_valid_i ? refill_core_rsp_i.error :
-                                (uc_core_rsp_valid_i     ? uc_core_rsp_i.error : st1_rsp_error));
+                                (cmo_core_rsp_valid_i    ? cmo_core_rsp_i.error :
+                                (uc_core_rsp_valid_i     ? uc_core_rsp_i.error : st1_rsp_error)));
     assign core_rsp_o.aborted = st1_rsp_aborted;
     //  }}}
 

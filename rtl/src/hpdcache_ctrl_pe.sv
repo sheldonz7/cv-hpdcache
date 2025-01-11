@@ -178,6 +178,7 @@ module hpdcache_ctrl_pe
     input  logic                   cmo_busy_i,
     input  logic                   cmo_wait_i,
     output logic                   cmo_req_valid_o,
+    output logic                   cmo_core_rsp_ready_o,
     //   }}}
 
     //   Configuration
@@ -230,7 +231,8 @@ module hpdcache_ctrl_pe
 
     //  Arbitration of responses to the core
     //  {{{
-    assign uc_core_rsp_ready_o = ~refill_core_rsp_valid_i;
+    assign uc_core_rsp_ready_o  = ~refill_core_rsp_valid_i;
+    assign cmo_core_rsp_ready_o = ~refill_core_rsp_valid_i;
     //  }}}
 
     //  Replay logic
@@ -405,6 +407,9 @@ module hpdcache_ctrl_pe
                     st1_rtab_commit_o = st1_req_rtab_i;
                     st1_rsp_valid_o = st1_req_need_rsp_i;
                     st1_rsp_error_o = st1_req_need_rsp_i;
+
+                    //  Performance event
+                    evt_write_req_o = st1_req_is_store_i;
                 end
 
                 //  Allocate a new entry in the replay table in case of conflict with
