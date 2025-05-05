@@ -1,6 +1,7 @@
 /**
  * Copyright 2023,2024 CEA*
  * *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+ *  Copyright 2025 Inria, Universite Grenoble-Alpes, TIMA
  *
  * SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
  *
@@ -43,8 +44,8 @@ public:
     sc_out <bool>                                core_req_valid_o;
     sc_in  <bool>                                core_req_ready_i;
     sc_out <sc_bv<HPDCACHE_CORE_REQ_WIDTH> >     core_req_o;
-    sc_out <uint64_t>                            core_req_tag_o;
-    sc_out <uint32_t>                            core_req_pma_o;
+    sc_out <sc_bv<HPDCACHE_TAG_WIDTH> >          core_req_tag_o;
+    sc_out <sc_bv<HPDCACHE_REQ_PMA_WIDTH> >      core_req_pma_o;
     sc_out <bool>                                core_req_abort_o;
 
     sc_in  <bool>                                core_rsp_valid_i;

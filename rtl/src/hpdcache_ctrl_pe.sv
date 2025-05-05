@@ -1,6 +1,7 @@
 /*
  *  Copyright 2023 CEA*
  *  *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+ *  Copyright 2025 Inria, Universite Grenoble-Alpes, TIMA
  *
  *  SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
  *
@@ -24,6 +25,16 @@
  *  History       :
  */
 module hpdcache_ctrl_pe
+    // Package imports
+    // {{{
+import hpdcache_pkg::*;
+    // }}}
+    // Parameters
+    // {{{
+#(
+    parameter hpdcache_cfg_t HPDcacheCfg = '0
+)
+    // }}}
     // Ports
     // {{{
 (
@@ -52,7 +63,6 @@ module hpdcache_ctrl_pe
     input  logic                   st0_req_is_cmo_prefetch_i,
     output logic                   st0_req_mshr_check_o,
     output logic                   st0_req_cachedir_read_o,
-    output logic                   st0_req_cachedata_read_o,
     //   }}}
 
     //   Pipeline stage 1
@@ -92,6 +102,7 @@ module hpdcache_ctrl_pe
     input  logic                   st1_mshr_alloc_ready_i,
     input  logic                   st1_mshr_hit_i,
     input  logic                   st1_mshr_full_i,
+    input  logic                   st1_mshr_cbuf_full_i,
     //   }}}
 
     //   Pipeline stage 2
@@ -99,10 +110,12 @@ module hpdcache_ctrl_pe
     input  logic                   st2_mshr_alloc_i,
     input  logic                   st2_mshr_alloc_is_prefetch_i,
     input  logic                   st2_mshr_alloc_wback_i,
+    input  logic                   st2_mshr_alloc_dirty_i,
     output logic                   st2_mshr_alloc_o,
     output logic                   st2_mshr_alloc_cs_o,
     output logic                   st2_mshr_alloc_need_rsp_o,
     output logic                   st2_mshr_alloc_wback_o,
+    output logic                   st2_mshr_alloc_dirty_o,
 
     input  logic                   st2_dir_updt_i,
     input  logic                   st2_dir_updt_valid_i,
@@ -114,6 +127,11 @@ module hpdcache_ctrl_pe
     output logic                   st2_dir_updt_wback_o,
     output logic                   st2_dir_updt_dirty_o,
     output logic                   st2_dir_updt_fetch_o,
+    //   }}}
+
+    //   Cache data read enable
+    //   {{{
+    output logic                   req_cachedata_read_o,
     //   }}}
 
     //   Replay
@@ -208,6 +226,7 @@ module hpdcache_ctrl_pe
     //  {{{
     logic  st1_fence;
     logic  st1_rtab_alloc, st1_rtab_alloc_and_link;
+    logic  st0_req_cachedata_read, st1_req_cachedata_read;
     //  }}}
 
     //  Global control signals
@@ -247,15 +266,20 @@ module hpdcache_ctrl_pe
            evt_rtab_rollback_o = st1_rtab_rback_o;
     //  }}}
 
+    //  Cachedata read enable
+    //  {{{
+    assign req_cachedata_read_o = st0_req_cachedata_read | st1_req_cachedata_read;
+    //  }}}
+
+
     //  Data-cache control lines
     //  {{{
     always_comb
     begin : hpdcache_ctrl_comb
         automatic logic nop;
         automatic logic st1_nop; //  Do not consume a request in stage 0 because of stage 1 hazard
-        automatic logic st2_nop; //  Do not consume a request in stage 0 because of stage 2 haward
+        automatic logic st2_nop; //  Do not consume a request in stage 0 because of stage 2 hazard
         automatic logic st1_req_is_cacheable_store;
-
 
         uc_req_valid_o                      = 1'b0;
 
@@ -271,12 +295,13 @@ module hpdcache_ctrl_pe
 
         st0_req_mshr_check_o                = 1'b0;
         st0_req_cachedir_read_o             = 1'b0;
-        st0_req_cachedata_read_o            = 1'b0;
+        st0_req_cachedata_read              = 1'b0;
 
         st1_req_valid_o                     = st1_req_valid_i;
         st1_req_is_error_o                  = st1_req_is_error_i;
         st1_req_is_cacheable_store          = 1'b0;
         st1_nop                             = 1'b0;
+        st1_req_cachedata_read              = 1'b0;
         st1_req_cachedata_write_o           = 1'b0;
         st1_req_cachedata_write_enable_o    = 1'b0;
         st1_req_cachedir_sel_victim_o       = 1'b0;
@@ -289,6 +314,7 @@ module hpdcache_ctrl_pe
         st2_mshr_alloc_cs_o                 = 1'b0;
         st2_mshr_alloc_need_rsp_o           = 1'b0;
         st2_mshr_alloc_wback_o              = st2_mshr_alloc_wback_i;
+        st2_mshr_alloc_dirty_o              = st2_mshr_alloc_dirty_i;
 
         st2_flush_alloc_o                   = st2_flush_alloc_i;
 
@@ -459,6 +485,14 @@ module hpdcache_ctrl_pe
                             st1_nop = 1'b1;
                         end
 
+                        //  Pending miss on the same line
+                        else if (st1_mshr_hit_i) begin
+                            //  Put the request in the replay table
+                            st1_rtab_alloc = 1'b1;
+                            st1_rtab_mshr_hit_o = 1'b1;
+                            st1_nop = 1'b1;
+                        end
+
                         //  Process the AMO request
                         else begin
                             uc_req_valid_o = 1'b1;
@@ -581,6 +615,7 @@ module hpdcache_ctrl_pe
                                 st2_mshr_alloc_need_rsp_o = st1_req_need_rsp_i;
                                 st2_mshr_alloc_wback_o = (st1_req_wr_auto_i & cfg_default_wb_i) |
                                                           st1_req_wr_wb_i;
+                                st2_mshr_alloc_dirty_o = 1'b0;
 
                                 //  Update the cache directory state to FETCHING
                                 st2_dir_updt_o = 1'b1;
@@ -618,6 +653,12 @@ module hpdcache_ctrl_pe
                                 st1_req_cachedir_updt_sel_victim_o =
                                     ~st1_req_is_cmo_prefetch_i |
                                      cfg_prefetch_updt_plru_i;
+
+                                //  If not lowLatency, data is read from the cache in stage 1
+                                if (!HPDcacheCfg.u.lowLatency) begin
+                                    //  Read data from the cache
+                                    st1_req_cachedata_read = 1'b1;
+                                end
 
                                 //  Respond to the core (if needed)
                                 st1_rsp_valid_o = st1_req_need_rsp_i;
@@ -668,18 +709,19 @@ module hpdcache_ctrl_pe
                     //  Store cacheable request
                     //  {{{
                     if (st1_req_is_store_i) begin
-                        //  Add a NOP in the pipeline when:
-                        //  - Structural hazard on the cache data if the st0 request is a load
-                        //    operation.
-                        //  - Replaying a request, the cache cannot accept a request from the
-                        //    core the next cycle. It can however accept a new request from the
-                        //    replay table
-                        //
-                        //  IMPORTANT: we could remove the NOP in the first scenario if the
-                        //  controller checks for the hit of this write. However, this adds
-                        //  a DIR_RAM -> DATA_RAM timing path.
-                        st1_nop = ((core_req_valid_i |  rtab_req_valid_i) & st0_req_is_load_i) |
-                                   (st1_req_rtab_i   & ~rtab_req_valid_i);
+                        //  Add a NOP in the pipeline when: Replaying a request, the cache cannot
+                        //  accept a request from the core the next cycle. It can however accept
+                        //  a new request from the replay table
+                        if (!HPDcacheCfg.u.lowLatency) begin
+                            st1_nop = st1_req_rtab_i & ~rtab_req_valid_i;
+                        end
+
+                        // Additional NOP case in lowLatency mode: Structural hazard on the cache
+                        // data if the st0 request is a load operation.
+                        else begin
+                            st1_nop = ((core_req_valid_i |  rtab_req_valid_i) & st0_req_is_load_i) |
+                                       (st1_req_rtab_i   & ~rtab_req_valid_i);
+                        end
 
                         //  Enable the data RAM in case of write. However, the actual write
                         //  depends on the hit signal from the cache directory.
@@ -774,19 +816,31 @@ module hpdcache_ctrl_pe
 
                                     //  Send a miss request to the memory (write-allocate)
                                     st2_mshr_alloc_o = 1'b1;
-                                    st2_mshr_alloc_need_rsp_o = 1'b0;
                                     st2_mshr_alloc_wback_o = 1'b1;
-                                    // FIXME Optimization: ask here the miss handler to set the
-                                    //       dirty bit when the new cacheline is refilled to avoid
-                                    //       the update penalty of the pending write
-                                    // st2_mshr_alloc_dirty_o = 1'b1
 
-                                    //  Put the request in the replay table
-                                    st1_rtab_alloc = 1'b1;
-                                    st1_rtab_write_miss_o = 1'b1;
+                                    //  No available slot in the Coalesce Buffer:
+                                    //  - Put the write operation into the replay table (but the
+                                    //    read miss is triggered before hand to save some time)
+                                    if (st1_mshr_cbuf_full_i) begin
+                                        st2_mshr_alloc_need_rsp_o = 1'b0;
+                                        st2_mshr_alloc_dirty_o = 1'b0;
+                                        st1_rtab_alloc = 1'b1;
+                                        st1_rtab_write_miss_o = 1'b1;
+                                    end
+
+                                    //  The write can be completely process (coalesce buffer
+                                    //  available):
+                                    //  - Indicate to the MSHR that a response to the core is needed
+                                    //  - Indicate a commit to RTAB if the request comes from it
+                                    else begin
+                                        st2_mshr_alloc_need_rsp_o = st1_req_need_rsp_i;
+                                        st2_mshr_alloc_dirty_o = 1'b1;
+                                        st1_rtab_commit_o = st1_req_rtab_i;
+                                    end
 
                                     //  Performance event
                                     evt_cache_write_miss_o = 1'b1;
+                                    evt_write_req_o = ~st1_mshr_cbuf_full_i;
                                 end
                             end
                             //  }}}
@@ -873,7 +927,7 @@ module hpdcache_ctrl_pe
                                     //  corresponding RTAB entry
                                     st1_rtab_commit_o = st1_req_rtab_i;
 
-                                    //  Respond to the core
+                                    //  Respond to the core (if needed)
                                     st1_rsp_valid_o = st1_req_need_rsp_i;
 
                                     //  Write in the data RAM
@@ -940,7 +994,7 @@ module hpdcache_ctrl_pe
                                     //  corresponding RTAB entry
                                     st1_rtab_commit_o = st1_req_rtab_i;
 
-                                    //  Respond to the core
+                                    //  Respond to the core (if needed)
                                     st1_rsp_valid_o = st1_req_need_rsp_i;
 
                                     //  Update victim selection for the accessed set
@@ -1015,8 +1069,10 @@ module hpdcache_ctrl_pe
                 st1_req_is_cacheable_store = st1_req_valid_i & st1_req_is_store_i &
                         ~st1_req_is_uncacheable_i;
 
-                st0_req_cachedata_read_o = st0_req_is_load_i &
-                        (~st1_req_is_cacheable_store | st1_req_is_error_i);
+                if (HPDcacheCfg.u.lowLatency) begin
+                    st0_req_cachedata_read = st0_req_is_load_i &
+                            (~st1_req_is_cacheable_store | st1_req_is_error_i);
+                end
 
                 if (st0_req_is_load_i         |
                     st0_req_is_cmo_prefetch_i |
