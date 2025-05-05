@@ -1,6 +1,7 @@
 /**
  *  Copyright 2023,2024 CEA*
  *  *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+ *  Copyright 2025 Inria, Universite Grenoble-Alpes, TIMA
  *
  *  SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
  *
@@ -53,6 +54,7 @@ class hpdcache_test
 public:
     uint64_t max_cycles;
     uint64_t max_trans;
+    size_t error_limit;
     bool trace_on;
     std::string trace_name;
 
@@ -65,6 +67,7 @@ public:
     hpdcache_test() :
         max_cycles(1ULL << 30),
         max_trans(100),
+        error_limit(0),
         covname(""),
         tf(nullptr),
         seq(nullptr)
@@ -224,6 +227,7 @@ public:
         hpdcache_test_agent_i->add_sequence(seq);
         hpdcache_test_scoreboard_i->set_sequence(seq);
         hpdcache_test_scoreboard_i->set_mem_resp_model(hpdcache_test_mem_resp_model_i);
+        hpdcache_test_scoreboard_i->set_error_limit(error_limit);
     }
 
     void simulate()
@@ -354,45 +358,45 @@ private:
     sc_core::sc_signal <bool> core_req_ready;
     sc_core::sc_signal <sc_bv<HPDCACHE_CORE_REQ_WIDTH> > core_req;
     sc_core::sc_signal <bool> core_req_abort;
-    sc_core::sc_signal <uint64_t> core_req_tag;
-    sc_core::sc_signal <uint32_t> core_req_pma;
+    sc_core::sc_signal <sc_bv<HPDCACHE_TAG_WIDTH> > core_req_tag;
+    sc_core::sc_signal <sc_bv<HPDCACHE_REQ_PMA_WIDTH> > core_req_pma;
     sc_core::sc_signal <bool> core_rsp_valid;
     sc_core::sc_signal <sc_bv<HPDCACHE_CORE_RSP_WIDTH> > core_rsp;
 
     sc_core::sc_signal <bool> mem_req_read_ready;
     sc_core::sc_signal <bool> mem_req_read_valid;
-    sc_core::sc_signal <uint64_t> mem_req_read_addr;
-    sc_core::sc_signal <uint32_t> mem_req_read_len;
-    sc_core::sc_signal <uint32_t> mem_req_read_size;
-    sc_core::sc_signal <uint32_t> mem_req_read_id;
-    sc_core::sc_signal <uint32_t> mem_req_read_command;
-    sc_core::sc_signal <uint32_t> mem_req_read_atomic;
+    sc_core::sc_signal <sc_bv<HPDCACHE_MEM_ADDR_WIDTH> > mem_req_read_addr;
+    sc_core::sc_signal <sc_bv<8> > mem_req_read_len;
+    sc_core::sc_signal <sc_bv<3> > mem_req_read_size;
+    sc_core::sc_signal <sc_bv<HPDCACHE_MEM_ID_WIDTH> > mem_req_read_id;
+    sc_core::sc_signal <sc_bv<2> > mem_req_read_command;
+    sc_core::sc_signal <sc_bv<4> > mem_req_read_atomic;
     sc_core::sc_signal <bool> mem_req_read_cacheable;
     sc_core::sc_signal <bool> mem_resp_read_ready;
     sc_core::sc_signal <bool> mem_resp_read_valid;
-    sc_core::sc_signal <uint32_t> mem_resp_read_error;
-    sc_core::sc_signal <uint32_t> mem_resp_read_id;
+    sc_core::sc_signal <sc_bv<2> > mem_resp_read_error;
+    sc_core::sc_signal <sc_bv<HPDCACHE_MEM_ID_WIDTH> > mem_resp_read_id;
     sc_core::sc_signal <sc_bv<HPDCACHE_MEM_DATA_WIDTH> > mem_resp_read_data;
     sc_core::sc_signal <bool> mem_resp_read_last;
     sc_core::sc_signal <bool> mem_req_write_ready;
     sc_core::sc_signal <bool> mem_req_write_valid;
-    sc_core::sc_signal <uint64_t> mem_req_write_addr;
-    sc_core::sc_signal <uint32_t> mem_req_write_len;
-    sc_core::sc_signal <uint32_t> mem_req_write_size;
-    sc_core::sc_signal <uint32_t> mem_req_write_id;
-    sc_core::sc_signal <uint32_t> mem_req_write_command;
-    sc_core::sc_signal <uint32_t> mem_req_write_atomic;
+    sc_core::sc_signal <sc_bv<HPDCACHE_MEM_ADDR_WIDTH> > mem_req_write_addr;
+    sc_core::sc_signal <sc_bv<8> > mem_req_write_len;
+    sc_core::sc_signal <sc_bv<3> > mem_req_write_size;
+    sc_core::sc_signal <sc_bv<HPDCACHE_MEM_ID_WIDTH> > mem_req_write_id;
+    sc_core::sc_signal <sc_bv<2> > mem_req_write_command;
+    sc_core::sc_signal <sc_bv<4> > mem_req_write_atomic;
     sc_core::sc_signal <bool> mem_req_write_cacheable;
     sc_core::sc_signal <bool> mem_req_write_data_ready;
     sc_core::sc_signal <bool> mem_req_write_data_valid;
     sc_core::sc_signal <sc_bv<HPDCACHE_MEM_DATA_WIDTH> > mem_req_write_data;
-    sc_core::sc_signal <uint64_t> mem_req_write_be;
+    sc_core::sc_signal <sc_bv<HPDCACHE_MEM_DATA_WIDTH/8> > mem_req_write_be;
     sc_core::sc_signal <bool> mem_req_write_last;
     sc_core::sc_signal <bool> mem_resp_write_ready;
     sc_core::sc_signal <bool> mem_resp_write_valid;
     sc_core::sc_signal <bool> mem_resp_write_is_atomic;
-    sc_core::sc_signal <uint32_t> mem_resp_write_error;
-    sc_core::sc_signal <uint32_t> mem_resp_write_id;
+    sc_core::sc_signal <sc_bv<2> > mem_resp_write_error;
+    sc_core::sc_signal <sc_bv<HPDCACHE_MEM_ID_WIDTH> > mem_resp_write_id;
 
     sc_core::sc_fifo<hpdcache_test_transaction_req> sb_core_req;
     sc_core::sc_fifo<hpdcache_test_transaction_resp> sb_core_resp;
@@ -416,7 +420,7 @@ private:
     sc_core::sc_signal <bool> wbuf_empty;
 
     sc_core::sc_signal <bool> cfg_enable;
-    sc_core::sc_signal <uint32_t> cfg_wbuf_threshold;
+    sc_core::sc_signal <sc_bv<3> > cfg_wbuf_threshold;
     sc_core::sc_signal <bool> cfg_wbuf_reset_timecnt_on_write;
     sc_core::sc_signal <bool> cfg_wbuf_sequential_waw;
     sc_core::sc_signal <bool> cfg_wbuf_inhibit_write_coalescing;
@@ -452,7 +456,7 @@ int sc_main(int argc, char** argv)
         };
 
         option_index = 0;
-        c = getopt_long(argc, argv, "hm:n:r:c:l:t:s:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hm:n:r:c:l:t:s:e:", long_options, &option_index);
         if (c == -1) break;
 
         switch (c) {
@@ -502,6 +506,9 @@ int sc_main(int argc, char** argv)
             }
             case 's':
                 test.set_sequence(optarg);
+                break;
+            case 'e':
+                test.error_limit = atoll(optarg);
                 break;
         }
     }

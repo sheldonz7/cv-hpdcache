@@ -1,6 +1,7 @@
 /*
  *  Copyright 2023 CEA*
  *  *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+ *  Copyright 2025 Inria, Universite Grenoble-Alpes, TIMA
  *
  *  SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
  *
@@ -139,11 +140,13 @@ import hpdcache_pkg::*;
     input  hpdcache_set_t                       data_req_read_set_i,
     input  hpdcache_req_size_t                  data_req_read_size_i,
     input  hpdcache_word_t                      data_req_read_word_i,
+    input  hpdcache_way_vector_t                data_req_read_way_i,
     output hpdcache_req_data_t                  data_req_read_data_o,
 
     input  logic                                data_req_write_i,
     input  logic                                data_req_write_enable_i,
     input  hpdcache_set_t                       data_req_write_set_i,
+    input  hpdcache_way_vector_t                data_req_write_way_i,
     input  hpdcache_req_size_t                  data_req_write_size_i,
     input  hpdcache_word_t                      data_req_write_word_i,
     input  hpdcache_req_data_t                  data_req_write_data_i,
@@ -763,10 +766,11 @@ import hpdcache_pkg::*;
     end
 
     //  Multiplex between read and write access on the data RAM
-    assign  data_way = data_refill_i     ? data_refill_way_i :
-                       data_flush_read_i ? data_flush_read_way_i :
-                       data_amo_write_i  ? dir_amo_hit_way_o :
-                                           dir_hit_way_o;
+    assign data_way = data_refill_i     ? data_refill_way_i :
+                      data_flush_read_i ? data_flush_read_way_i :
+                      data_amo_write_i  ? dir_amo_hit_way_o :
+                      data_req_read_i   ? data_req_read_way_i :
+                                          data_req_write_way_i;
 
     //  Decode way index
     assign data_ram_word = hpdcache_way_to_data_ram_word(data_way);
@@ -889,7 +893,7 @@ import hpdcache_pkg::*;
         .ONE_HOT_SEL (1'b1)
     ) data_read_req_word_way_mux_i(
         .data_i      (data_read_req_word),
-        .sel_i       (dir_hit_way_o),
+        .sel_i       (data_req_read_way_i),
         .data_o      (data_req_read_data_o)
     );
 
@@ -969,12 +973,13 @@ import hpdcache_pkg::*;
     //  {{{
 `ifndef HPDCACHE_ASSERT_OFF
     for (gen_i = 0; gen_i < HPDcacheCfg.u.ways; gen_i++) begin : gen_check_dirty_state
-        check_dirty_state: assert property (@(posedge clk_i) disable iff (!rst_ni || !init_q)
+        check_dirty_state: assert property (@(posedge clk_i)
+                disable iff ((rst_ni !== 1'b1) || (init_q !== 1'b1))
                 (dir_cs[gen_i] & ~dir_we[gen_i]) |=> (dir_dirty[gen_i] |-> dir_valid[gen_i])) else
                 $error("hpdcache_memctrl: wrong directory state - dirty but not valid");
     end
 
-    concurrent_dir_access_assert: assert property (@(posedge clk_i) disable iff (!rst_ni)
+    concurrent_dir_access_assert: assert property (@(posedge clk_i) disable iff (rst_ni !== 1'b1)
             $onehot0({dir_match_i,
                       dir_amo_match_i,
                       dir_refill_i,
@@ -986,7 +991,7 @@ import hpdcache_pkg::*;
                       dir_updt_i})) else
             $error("hpdcache_memctrl: more than one process is accessing the cache directory");
 
-    concurrent_data_access_assert: assert property (@(posedge clk_i) disable iff (!rst_ni)
+    concurrent_data_access_assert: assert property (@(posedge clk_i) disable iff (rst_ni !== 1'b1)
             $onehot0({data_req_read_i,
                       data_req_write_i,
                       data_amo_write_i,
