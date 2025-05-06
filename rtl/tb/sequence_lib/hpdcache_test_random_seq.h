@@ -1,7 +1,6 @@
 /**
  *  Copyright 2023,2024 CEA*
  *  *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
- *  Copyright 2025 Inria, Universite Grenoble-Alpes, TIMA
  *
  *  SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
  *
@@ -126,18 +125,12 @@ public:
         hpdcache_test_sequence::op_amo_distribution.push(hpdcache_test_transaction_req::HPDCACHE_REQ_AMO_MIN,                4);
         hpdcache_test_sequence::op_amo_distribution.push(hpdcache_test_transaction_req::HPDCACHE_REQ_AMO_MINU,               4);
         hpdcache_test_sequence::op_amo->set_mode(op_amo_distribution);
-
-        scv_bag<bool> need_rsp_distribution;
-        need_rsp_distribution.push(false, 5);
-        need_rsp_distribution.push(true, 95);
-        need_rsp_rnd->set_mode(need_rsp_distribution);
     }
 
 private:
     hpdcache_test_sequence::hpdcache_test_memory_segment seg[4];
     scv_smart_ptr<sc_bv<HPDCACHE_REQ_DATA_WIDTH> > data;
     scv_smart_ptr<sc_bv<HPDCACHE_REQ_DATA_WIDTH> > size;
-    scv_smart_ptr<bool> need_rsp_rnd;
     const unsigned int HPDCACHE_REQ_DATA_BYTES = HPDCACHE_REQ_DATA_WIDTH/8;
 
 #if SC_VERSION_MAJOR < 3
@@ -164,19 +157,19 @@ private:
         std::shared_ptr<hpdcache_test_transaction_req> t;
 
         scv_smart_ptr<uint64_t> addr("addr");
-        bool seg_amo_supported;
-        bool seg_wr_policy_random;
-        hpdcache_test_memory_segment::wr_policy_e seg_wr_policy;
-        int segn;
 
         while (!is_available_id()) wait();
 
-        segptr->next();
-        segn = segptr->read();
+        hpdcache_test_sequence::segptr->next();
+        int segn = segptr->read();
 
-        seg_wr_policy = seg[segn].get_wr_policy_hint();
-        seg_amo_supported = seg[segn].is_amo_supported();
-        seg_wr_policy_random = (seg_wr_policy == hpdcache_test_memory_segment::WR_POLICY_RANDOM);
+        hpdcache_test_memory_segment::wr_policy_e seg_wr_policy =
+            seg[segn].get_wr_policy_hint();
+
+        bool seg_amo_supported =
+            seg[segn].is_amo_supported();
+        bool seg_wr_policy_random =
+            (seg_wr_policy == hpdcache_test_memory_segment::WR_POLICY_RANDOM);
 
         addr->next();
 
@@ -211,8 +204,10 @@ private:
         }
 
         //  Select address and size
-        bool req_is_amo = t->is_amo() || t->is_amo_sc() || t->is_amo_lr();
-        uint32_t sz = create_random_size(req_is_amo);
+        uint32_t sz = create_random_size(
+                t->is_amo() ||
+                t->is_amo_sc() ||
+                t->is_amo_lr());
         uint64_t base    = seg[segn].get_base();
         uint64_t length  = seg[segn].get_length();
         uint32_t bytes   = 1 << sz;
@@ -223,20 +218,13 @@ private:
             t->req_be          = 0;
             t->req_size        = 0;
             t->req_uncacheable = false;
-
-            need_rsp_rnd->next();
-            t->req_need_rsp = need_rsp_rnd->read();
+            t->req_need_rsp    = true;
         } else {
             uint32_t offset = address % HPDCACHE_REQ_DATA_BYTES;
             t->req_be          = ((1UL << bytes) - 1) << offset;
             t->req_size        = sz;
             t->req_uncacheable = seg[segptr->read()].is_uncached() ? 1 : 0;
-            if (req_is_amo) {
-                t->req_need_rsp = true;
-            } else {
-                need_rsp_rnd->next();
-                t->req_need_rsp = need_rsp_rnd->read();
-            }
+            t->req_need_rsp    = true;
         }
 
         return t;
@@ -248,7 +236,7 @@ private:
 
         while (!is_available_id()) wait();
 
-        segptr->next();
+        hpdcache_test_sequence::segptr->next();
 
         uint32_t sz      = create_random_size(true);
         uint32_t bytes   = 1 << sz;

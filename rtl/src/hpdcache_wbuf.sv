@@ -1,7 +1,6 @@
 /*
  *  Copyright 2023 CEA*
  *  *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
- *  Copyright 2025 Inria, Universite Grenoble-Alpes, TIMA
  *
  *  SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
  *
@@ -188,10 +187,6 @@ import hpdcache_pkg::*;
     logic                                       wbuf_data_free;
     wbuf_data_ptr_t                             wbuf_data_free_ptr;
     logic [WBUF_DATA_NENTRIES-1:0]              wbuf_data_free_ptr_bv;
-
-    logic                                       wbuf_data_w_init;
-    logic                                       wbuf_data_w;
-    wbuf_data_ptr_t                             wbuf_data_w_ptr;
 
     logic                                       wbuf_write_free;
     logic                                       wbuf_write_hit_open;
@@ -458,10 +453,7 @@ import hpdcache_pkg::*;
 
         wbuf_dir_state_d = wbuf_dir_state_q;
         wbuf_dir_d = wbuf_dir_q;
-
-        wbuf_data_w_init = 1'b0;
-        wbuf_data_w = 1'b0;
-        wbuf_data_w_ptr = '0;
+        wbuf_data_d = wbuf_data_q;
 
         for (int unsigned i = 0; i < WBUF_DIR_NENTRIES; i++) begin
             unique case (wbuf_dir_state_q[i])
@@ -480,9 +472,14 @@ import hpdcache_pkg::*;
                         wbuf_dir_d[i].ptr = wbuf_data_free_ptr;
                         wbuf_dir_d[i].uc  = write_uc_i;
 
-                        wbuf_data_w_init = 1'b1;
-                        wbuf_data_w = 1'b1;
-                        wbuf_data_w_ptr = wbuf_data_free_ptr;
+                        wbuf_data_write(
+                            wbuf_data_d[wbuf_data_free_ptr].data,
+                            wbuf_data_d[wbuf_data_free_ptr].be,
+                            '0,
+                            '0,
+                            write_data,
+                            write_be
+                        );
                     end
                 end
 
@@ -511,8 +508,14 @@ import hpdcache_pkg::*;
                     end
 
                     if (write_hit) begin
-                        wbuf_data_w = 1'b1;
-                        wbuf_data_w_ptr = wbuf_dir_q[i].ptr;
+                        wbuf_data_write(
+                            wbuf_data_d[wbuf_dir_q[i].ptr].data,
+                            wbuf_data_d[wbuf_dir_q[i].ptr].be,
+                            wbuf_data_q[wbuf_dir_q[i].ptr].data,
+                            wbuf_data_q[wbuf_dir_q[i].ptr].be,
+                            write_data,
+                            write_be
+                        );
                     end
                 end
 
@@ -524,8 +527,14 @@ import hpdcache_pkg::*;
                                 & ~cfg_inhibit_write_coalescing_i;
 
                     if (write_hit) begin
-                        wbuf_data_w = 1'b1;
-                        wbuf_data_w_ptr = wbuf_dir_q[i].ptr;
+                        wbuf_data_write(
+                            wbuf_data_d[wbuf_dir_q[i].ptr].data,
+                            wbuf_data_d[wbuf_dir_q[i].ptr].be,
+                            wbuf_data_q[wbuf_dir_q[i].ptr].data,
+                            wbuf_data_q[wbuf_dir_q[i].ptr].be,
+                            write_data,
+                            write_be
+                        );
                     end
 
                     if (wbuf_send_grant[i] && send_data_ready && send_meta_ready) begin
@@ -539,24 +548,6 @@ import hpdcache_pkg::*;
                     end
                 end
             endcase
-        end
-    end
-
-    always_comb
-    begin : wbuf_data_write_comb
-        automatic wbuf_be_buf_t buf_be;
-
-        wbuf_data_d = wbuf_data_q;
-        buf_be = wbuf_data_w_init ? '0 : wbuf_data_q[wbuf_data_w_ptr].be;
-
-        if (wbuf_data_w) begin
-            wbuf_data_write(
-                wbuf_data_d[wbuf_data_w_ptr].data,
-                wbuf_data_d[wbuf_data_w_ptr].be,
-                wbuf_data_q[wbuf_data_w_ptr].data,
-                buf_be,
-                write_data,
-                write_be);
         end
     end
 
@@ -716,18 +707,17 @@ import hpdcache_pkg::*;
     //  Assertions
     //  {{{
 `ifndef HPDCACHE_ASSERT_OFF
-    if (!(WBUF_DATA_NWORDS inside {1, 2, 4, 8, 16}))
-    begin : gen_wbuf_data_words_assertion
-        $fatal(1, "WBUF: width of data buffers must be a power of 2");
-    end
-    if (HPDcacheCfg.u.memDataWidth < HPDcacheCfg.wbufDataWidth)
-    begin : gen_mem_data_width_assertion
-        $fatal(1, "WBUF: width of mem interface shall be g.e. to wbuf width");
-    end
-    ack_sent_assert: assert property (@(posedge clk_i) disable iff (rst_ni !== 1'b1)
+    initial assert(WBUF_DATA_NWORDS inside {1, 2, 4, 8, 16}) else
+            $fatal("WBUF: width of data buffers must be a power of 2");
+    initial assert(WBUF_MEM_DATA_RATIO > 0) else
+            $fatal($sformatf("WBUF: width of mem interface (%d) shall be g.e. to wbuf width(%d)",
+                             HPDcacheCfg.u.memDataWidth, HPDcacheCfg.wbufDataWidth));
+    initial assert (HPDcacheCfg.wbufDirPtrWidth <= HPDcacheCfg.u.memIdWidth) else
+            $fatal("MemIdWidth is not wide enough to fit all possible write buffer transactions");
+    ack_sent_assert: assert property (@(posedge clk_i) disable iff (!rst_ni)
             (mem_resp_write_valid_i -> (wbuf_dir_state_q[ack_id] == WBUF_SENT))) else
             $error("WBUF: acknowledging a not SENT slot");
-    send_valid_data_assert: assert property (@(posedge clk_i) disable iff (rst_ni !== 1'b1)
+    send_valid_data_assert: assert property (@(posedge clk_i) disable iff (!rst_ni)
             (mem_req_write_data_valid_o -> (wbuf_data_valid_q[send_data_q.data_ptr] == 1'b1))) else
             $error("WBUF: sending a not valid data");
 `endif

@@ -101,6 +101,7 @@ module hpdcache_mem_req_write_arbiter
 
     //  Read grant FIFO when the NoC is able to receive the data and it is the last flit of data
     assign mem_write_arb_req_r = mem_req_write_data_ready_i &
+                                 mem_write_arb_req_rok &
                                  req_data_valid &
                                  req_data_last;
 
@@ -146,7 +147,7 @@ module hpdcache_mem_req_write_arbiter
     //  {{{
     hpdcache_fifo_reg #(
         .FIFO_DEPTH    (2),
-        .FEEDTHROUGH   (1'b0),
+        .FEEDTHROUGH   (1'b1),
         .fifo_data_t   (arb_gnt_t)
     ) req_gnt_fifo_i(
         .clk_i,

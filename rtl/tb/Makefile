@@ -1,7 +1,6 @@
 ##
 #  Copyright 2023,2024 CEA*
 #  *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
-#  Copyright 2025 Inria, Universite Grenoble-Alpes, TIMA
 #
 #  SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 #
@@ -57,7 +56,6 @@ TIMEOUT             ?= $$(( $(NTRANSACTIONS)*1000 ))
 SEQUENCE            ?= random
 LOG_LEVEL           ?= 1
 SEED                ?= 1234
-ERROR_LIMIT         ?= 0
 NTESTS              ?= 128
 TRACE               ?= 0
 
@@ -105,7 +103,6 @@ VERILATOR_FLAGS     += -Wall -Wno-fatal \
                        -Werror-MULTIDRIVEN \
                        -Wno-PINCONNECTEMPTY \
                        --report-unoptflat \
-                       --pins-bv 2 \
                        -O3 -I$(HPDCACHE_DIR)/rtl/src \
                        --x-assign unique --x-initial unique \
                        $(if $(filter 1,$(DISABLE_TRACE)),\
@@ -138,7 +135,6 @@ VERILATOR_RUNFLAGS  += +verilator+seed+$(SEED) \
                        -s $(SEQUENCE) \
                        -l $(LOG_LEVEL) \
                        -r $(SEED) \
-                       -e $(ERROR_LIMIT) \
                        $(if $(filter 1,$(TRACE)), +trace -t $(TRACE_FILE)) \
                        $(if $(filter 1,$(COV)),-c $(COV_FILE))
 
@@ -187,7 +183,6 @@ run <options>                Execute the specified test sequence on the
     [LOG_LEVEL=$(LOG_LEVEL)] - level of log verbosity (low = 0, 1, 2, high = 3)
     [NTRANSACTIONS=$(NTRANSACTIONS)] - nb of transactions during the test
     [SEED=$(SEED)] - random seed
-    [ERROR_LIMIT=$(ERROR_LIMIT)] - limit of errors during simulation to stop
 
 nonregression <options>      Execute a a non-regression test suite.
                              This suite executes the specified sequence
@@ -323,7 +318,6 @@ print_config:
 	@printf "CONF_HPDCACHE_MSHR_SETS_PER_RAM=$(CONF_HPDCACHE_MSHR_SETS_PER_RAM)\n"
 	@printf "CONF_HPDCACHE_MSHR_RAM_WBYTEENABLE=$(CONF_HPDCACHE_MSHR_RAM_WBYTEENABLE)\n"
 	@printf "CONF_HPDCACHE_MSHR_USE_REGBANK=$(CONF_HPDCACHE_MSHR_USE_REGBANK)\n"
-	@printf "CONF_HPDCACHE_CBUF_ENTRIES=$(CONF_HPDCACHE_CBUF_ENTRIES)\n"
 	@printf "CONF_HPDCACHE_REFILL_FIFO_DEPTH=$(CONF_HPDCACHE_REFILL_FIFO_DEPTH)\n"
 	@printf "CONF_HPDCACHE_REFILL_CORE_RSP_FEEDTHROUGH=$(CONF_HPDCACHE_REFILL_CORE_RSP_FEEDTHROUGH)\n"
 	@printf "CONF_HPDCACHE_RTAB_ENTRIES=$(CONF_HPDCACHE_RTAB_ENTRIES)\n"
@@ -334,4 +328,3 @@ print_config:
 	@printf "CONF_HPDCACHE_MEM_DATA_WIDTH=$(CONF_HPDCACHE_MEM_DATA_WIDTH)\n"
 	@printf "CONF_HPDCACHE_WT_ENABLE=$(CONF_HPDCACHE_WT_ENABLE)\n"
 	@printf "CONF_HPDCACHE_WB_ENABLE=$(CONF_HPDCACHE_WB_ENABLE)\n"
-	@printf "CONF_HPDCACHE_LOW_LATENCY=$(CONF_HPDCACHE_LOW_LATENCY)\n"

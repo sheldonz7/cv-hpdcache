@@ -38,11 +38,6 @@ inputs:
     required: true
     default: '32'
 
-  config:
-    description: 'File with DUT parameters'
-    required: true
-    default: 'default_config.mk'
-
 runs:
   using: "composite"
   steps:
@@ -75,7 +70,7 @@ runs:
       run: |
         . .github/scripts/env.sh
         cd rtl/tb
-        make verilate CONFIG=${{ inputs.config }}
+        make verilate
 
     - name: Archive Verilate log
       if: ${{ failure () && steps.verilate.conclusion == 'failure' }}
@@ -90,7 +85,7 @@ runs:
       run: |
         . .github/scripts/env.sh
         cd rtl/tb
-        make build -j${PARALLEL_JOBS} CONFIG=${{ inputs.config }}
+        make build -j${PARALLEL_JOBS}
 
     - name: Archive SystemC build log
       if: ${{ failure () && steps.build-tb.conclusion == 'failure' }}

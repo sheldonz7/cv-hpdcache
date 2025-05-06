@@ -1,7 +1,6 @@
 /**
  *  Copyright 2023,2024 CEA*
  *  *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
- *  Copyright 2025 Inria, Universite Grenoble-Alpes, TIMA
  *
  *  SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
  *
@@ -46,7 +45,7 @@
 // badly handled. The race conditions are when there is a refill on a given
 // set and at the same time a request on the same set (but different tag). In
 // that case, the LRU bits are updated in a undefined order (it depends on the
-// internal arbiter of the hpdcache that decides whether to handle the request
+// internal arbiter of the hpdcache that decides whether to handler the request
 // or the refill first).
 //
 // #define ENABLE_CACHE_DIR_VERIF 1
@@ -96,7 +95,6 @@ public:
             nb_mem_write_req(0),
             nb_mem_write_resp(0),
             nb_error(0),
-            sb_error_limit_m(0),
             evt_cache_write_miss(0),
             evt_cache_read_miss(0),
             evt_uncached_req(0),
@@ -215,11 +213,6 @@ public:
         mem_resp_model = p;
     }
 
-    void set_error_limit(size_t error_limit)
-    {
-        sb_error_limit_m = error_limit;
-    }
-
 private:
 
     uint64_t nb_cycles;
@@ -233,7 +226,6 @@ private:
     uint64_t nb_mem_write_resp;
 
     size_t   nb_error;
-    size_t   sb_error_limit_m;
 
     uint64_t evt_cache_write_miss;
     uint64_t evt_cache_read_miss;
@@ -255,10 +247,7 @@ private:
     static constexpr unsigned int CORE_REQ_BYTES      = CORE_REQ_WORDS*CORE_REQ_WORD_BYTES;
 
     struct inflight_entry_t {
-        uint64_t time;
-        uint32_t tid;
         uint64_t addr;
-        bool     need_rsp;
         bool     hit;
         bool     is_read;
         bool     is_write;
@@ -301,11 +290,9 @@ private:
     };
 
     struct inflight_mem_entry_t {
-        uint64_t                addr;
-        uint8_t                 bytes;
-        bool                    is_uncacheable;
-        bool                    is_error;
-        const inflight_entry_t *core_req_ptr;
+        uint64_t addr;
+        bool     is_uncacheable;
+        bool     is_error;
     };
 
     struct lrsc_reservation_buf_t
@@ -316,16 +303,11 @@ private:
         bool              is_atomic;
     };
 
-    static inline bool within_region(uint64_t addr, uint64_t base, uint64_t end)
+    bool within_region(uint64_t addr, uint64_t base, uint64_t end)
     {
         if (addr < base) return false;
         if (addr >  end) return false;
         return true;
-    }
-
-    static inline uint64_t get_nline(uint64_t addr)
-    {
-        return addr >> HPDCACHE_CL_OFFSET_WIDTH;
     }
 
     typedef std::map  <uint32_t, inflight_entry_t>          inflight_map_t;
@@ -381,15 +363,7 @@ private:
     {
         std::cout << sc_time_stamp().to_string()
                   << " / SB_ERROR: " << msg << std::endl;
-
         nb_error++;
-        if (sb_error_limit_m > 0 && (nb_error >= sb_error_limit_m)) {
-            std::cout << "SB_ERROR: number of errors exceeded the limit ("
-                      << sb_error_limit_m << ")"
-                      << std::endl;
-
-            std::exit(1);
-        }
     }
 
     void print_debug(const std::string &msg)
@@ -455,6 +429,7 @@ private:
                     }
                 }
 #endif
+
                 if (!req.req_need_rsp) {
                     //  release response ID on the sequence
                     seq->deallocate_id(req_id);
@@ -478,10 +453,7 @@ private:
 #endif
 
             inflight_entry_t e;
-            e.time           = nb_cycles;
-            e.tid            = req_id;
             e.addr           = req_addr;
-            e.need_rsp       = req.req_need_rsp;
             e.hit            = hit;
             e.is_read        = req.is_load();
             e.is_write       = req.is_store();
@@ -537,15 +509,15 @@ private:
                     if (check_verbosity(sc_core::SC_DEBUG)) {
                         print_debug("making LR reservation");
                     }
-                    lrsc_buf_m.valid = true;
+                    lrsc_buf_m.valid     = true;
                     lrsc_buf_m.base_addr = e.addr;
-                    lrsc_buf_m.end_addr = e.addr + 8;
+                    lrsc_buf_m.end_addr  = e.addr + 8;
                     lrsc_buf_m.is_atomic = false; // initialization
                 } else {
                     if (check_verbosity(sc_core::SC_DEBUG)) {
                         print_debug("invalidating previous LR reservation");
                     }
-                    lrsc_buf_m.valid = false;
+                    lrsc_buf_m.valid     = false;
                 }
             }
 
@@ -619,13 +591,8 @@ private:
 #endif
             }
 
-            if (req.req_need_rsp) {
-                //  add new core request into the table of inflight requests
-                inflight_m.insert(inflight_map_pair_t(req_id, e));
-            } else {
-                //  deallocate the ID immediately for requests with no response
-                seq->deallocate_id(req_id);
-            }
+            //  add new core request into the table of inflight requests
+            inflight_m.insert(inflight_map_pair_t(req_id, e));
         }
     }
 
@@ -668,8 +635,8 @@ private:
 
             if (!e.is_error) {
                 const uint64_t aligned_addr = align_to(e.addr, CORE_REQ_BYTES);
-                const int _word = (e.addr / CORE_REQ_WORD_BYTES) % CORE_REQ_WORDS;
-                const int _byte =  e.addr % CORE_REQ_BYTES;
+                const int             _word = (e.addr / CORE_REQ_WORD_BYTES) % CORE_REQ_WORDS;
+                const int             _byte =  e.addr % CORE_REQ_BYTES;
 
                 //  check the response status for SC operations
                 bool sc_ok;
@@ -763,6 +730,50 @@ private:
 #endif
                     }
                     //  }}}
+
+                    //  update uninitialized bytes of the scoreboard memory with the
+                    //  response from the external memory
+                    //  {{{
+                    else {
+                        uint8_t unset[CORE_REQ_WORDS];
+                        memset(unset, 0, sizeof(unset));
+                        for (int i = 0; i < CORE_REQ_BYTES; i++) {
+                            unset[i/8] |= (ram_m->getBmap(aligned_addr + i) ? 0x0 : 0x1) << (i % 8);
+                        }
+
+                        uint8_t be[CORE_REQ_WORDS];
+                        int bytes = e.bytes;
+                        memset(be, 0, sizeof(be));
+                        for (int i = _word; bytes > 0; i++) {
+                            uint8_t mask = static_cast<uint8_t>(((1UL << bytes) - 1) << (_byte - i*8));
+                            be[i] = mask & unset[i];
+                            bytes -= 8;
+                        }
+
+                        ram_m->write(
+                                reinterpret_cast<uint8_t*>(rdata),
+                                reinterpret_cast<uint8_t*>(be),
+                                HPDCACHE_REQ_DATA_WIDTH/8,
+                                aligned_addr);
+
+#if DEBUG_HPDCACHE_TEST_SCOREBOARD
+                        if (check_verbosity(sc_core::SC_DEBUG)) {
+                            for (int i = 0; i < CORE_REQ_WORDS; i++) {
+                                if (be[i]) {
+                                    std::stringstream ss;
+                                    ss << "update sb.mem @0x"
+                                       << std::hex << aligned_addr + i*8 << std::dec
+                                       << " = 0x"
+                                       << std::hex << rdata[i] << std::dec
+                                       << " / be = 0x"
+                                       << std::hex << (unsigned)be[i] << std::dec;
+                                    print_debug(ss.str());
+                                }
+                            }
+                        }
+#endif
+                    }
+                    //  }}}
                 }
             }
 
@@ -797,33 +808,12 @@ private:
                 continue;
             }
 
-            //  find the associated core request
-            const inflight_entry_t *core_req = nullptr;
-            for (const auto &cr : inflight_m) {
-                const inflight_entry_t &_cr = cr.second;
-                if (get_nline(_cr.addr) == get_nline(req.addr)) {
-                    //  get first occurence
-                    if (core_req == nullptr) {
-                        core_req = &_cr;
-                        continue;
-                    }
-
-                    //  if multiple occurences, get the oldest
-                    if (_cr.time < core_req->time) {
-                        core_req = &_cr;
-                    }
-                }
-            }
-
-            const uint64_t bytes = (1ULL << req.size);
-
             //  add new memory read request into the table of inflight memory requests
             inflight_mem_entry_t e;
+            uint64_t bytes = (1ULL << req.size);
             e.addr           = req.addr;
-            e.bytes          = bytes;
             e.is_uncacheable = !req.cacheable;
             e.is_error       = mem_resp_model->within_error_region(e.addr, e.addr + bytes);
-            e.core_req_ptr   = core_req;
 
             inflight_mem_read_m.insert(inflight_mem_map_pair_t(req_id, e));
 
@@ -861,13 +851,9 @@ private:
                 continue;
             }
 
-            //  get a pointer to the originating core request
-            const inflight_mem_entry_t *mem_req = &it->second;
-            const inflight_entry_t *core_req = mem_req->core_req_ptr;
-
 #if ENABLE_CACHE_DIR_VERIF
-            if (!mem_req->is_uncacheable) {
-                bool hit = cache_dir_m->hit(mem_req->addr, nullptr, nullptr);
+            if (!it->second.is_uncacheable) {
+                bool hit = cache_dir_m->hit(it->second.addr, nullptr, nullptr);
                 if (hit) {
                     print_error("memory read miss response while there is a corresponding line in the cache");
                 }
@@ -877,7 +863,10 @@ private:
                 size_t   victim_way;
                 size_t   victim_set;
                 bool     victim_valid = false;
-                victim_valid = cache_dir_m->repl(mem_req->addr, &victim_tag, &victim_way, &victim_set);
+                victim_valid = cache_dir_m->repl(it->second.addr,
+                                                 &victim_tag,
+                                                 &victim_way,
+                                                 &victim_set);
 
 #if DEBUG_HPDCACHE_TEST_SCOREBOARD
                 if (check_verbosity(sc_core::SC_DEBUG)) {
@@ -885,7 +874,7 @@ private:
 
                     unsigned int lru_vector = 0;
                     for (int way = 0; way < cache_dir_m->getWays(); way++) {
-                        if (cache_dir_m->getCachePlru(way, cache_dir_m->getAddrSet(mem_req->addr))) {
+                        if (cache_dir_m->getCachePlru(way, cache_dir_m->getAddrSet(it->second.addr))) {
                             lru_vector |= 1 << way;
                         }
                     }
@@ -895,16 +884,16 @@ private:
                            << std::hex << cache_dir_m->getAddr(victim_tag, victim_set) << std::dec
                            << " (set = 0x" << std::hex << victim_set << std::dec
                            << ", tag = 0x" << std::hex << victim_tag << std::dec
-                           << ") / @0x"  << std::hex << mem_req->addr << std::dec
-                           << " (tag = 0x" << std::hex << cache_dir_m->getAddrTag(mem_req->addr) << std::dec
+                           << ") / @0x"  << std::hex << it->second.addr << std::dec
+                           << " (tag = 0x" << std::hex << cache_dir_m->getAddrTag(it->second.addr) << std::dec
                            << ", way = 0x" << std::hex << victim_way << std::dec
                            << ", lru = 0x" << std::hex << lru_vector << std::dec
                            << ")";
                     } else {
                         ss << "TEST_SB.cache_dir / allocating @0x"
-                           << std::hex << std::hex << mem_req->addr << std::dec
-                           << " (set = 0x" << std::hex << cache_dir_m->getAddrSet(mem_req->addr) << std::dec
-                           << ", tag = 0x" << std::hex << cache_dir_m->getAddrTag(mem_req->addr) << std::dec
+                           << std::hex << std::hex << it->second.addr << std::dec
+                           << " (set = 0x" << std::hex << cache_dir_m->getAddrSet(it->second.addr) << std::dec
+                           << ", tag = 0x" << std::hex << cache_dir_m->getAddrTag(it->second.addr) << std::dec
                            << ", way = 0x" << std::hex << victim_way << std::dec
                            << ", lru = 0x" << std::hex << lru_vector << std::dec
                            << ")";
@@ -914,65 +903,9 @@ private:
 #endif
             }
 #endif
-            if (!resp.error) {
-                const int MEM_WORDS = HPDCACHE_MEM_DATA_WIDTH/64;
-                const int MEM_BYTES = HPDCACHE_MEM_DATA_WIDTH/8;
-                const uint64_t aligned_addr = align_to(mem_req->addr, MEM_BYTES);
-                const int _word = (mem_req->addr / MEM_BYTES) % MEM_WORDS;
-                const int _byte = mem_req->addr % MEM_BYTES;
-
-                //  update uninitialized bytes of the scoreboard memory with the
-                //  response from the external memory
-                //  {{{
-                uint64_t rdata[MEM_WORDS];
-                for (int i = 0; i < MEM_WORDS; i++) {
-                    rdata[i] = resp.data.range((i + 1)*64 - 1, i*64).to_uint64();
-                }
-
-                uint8_t unset[MEM_WORDS];
-                memset(unset, 0, sizeof(unset));
-                for (int i = 0; i < MEM_BYTES; i++) {
-                    unset[i/8] |= (ram_m->getBmap(aligned_addr + i) ? 0x0 : 0x1) << (i % 8);
-                }
-
-                uint8_t be[MEM_WORDS];
-                int bytes = mem_req->bytes;
-                memset(be, 0, sizeof(be));
-                for (int i = _word; bytes > 0; i++) {
-                    uint8_t mask = static_cast<uint8_t>(((1UL << bytes) - 1) << (_byte - i*8));
-                    be[i] = mask & unset[i];
-                    bytes -= 8;
-                }
-
-                ram_m->write(
-                        reinterpret_cast<uint8_t*>(rdata),
-                        reinterpret_cast<uint8_t*>(be),
-                        MEM_BYTES,
-                        aligned_addr);
-
-#if DEBUG_HPDCACHE_TEST_SCOREBOARD
-                if (check_verbosity(sc_core::SC_DEBUG)) {
-                    for (int i = 0; i < MEM_WORDS; i++) {
-                        if (be[i]) {
-                            std::stringstream ss;
-                            ss << "update sb.mem @0x"
-                                << std::hex << aligned_addr + i*8 << std::dec
-                                << " = 0x"
-                                << std::hex << rdata[i] << std::dec
-                                << " / be = 0x"
-                                << std::hex << (unsigned)be[i] << std::dec;
-                            print_debug(ss.str());
-                        }
-                    }
-                }
-#endif
-                //  }}}
-            }
 
             //  remove request from the inflight table
-            if (resp.last) {
-                inflight_mem_read_m.erase(it);
-            }
+            if (resp.last) inflight_mem_read_m.erase(it);
         }
     }
 
@@ -1000,34 +933,13 @@ private:
                 continue;
             }
 
-            //  find the associated core request
-            const inflight_entry_t *core_req = nullptr;
-            for (const auto &cr : inflight_m) {
-                const inflight_entry_t &_cr = cr.second;
-                if (get_nline(_cr.addr) == get_nline(req.addr)) {
-                    //  get first occurence
-                    if (core_req == nullptr) {
-                        core_req = &_cr;
-                        continue;
-                    }
-
-                    //  if multiple occurences, get the oldest
-                    if (_cr.time < core_req->time) {
-                        core_req = &_cr;
-                    }
-                }
-            }
-
             //  add new memory write request into the table of inflight memory requests
             inflight_mem_entry_t e;
             e.addr           = req.addr;
-            e.bytes          = bytes;
             e.is_uncacheable = !req.cacheable;
             e.is_error       = mem_resp_model->within_error_region(e.addr, e.addr + bytes);
-            e.core_req_ptr   = core_req;
 
             inflight_mem_write_m.insert(inflight_mem_map_pair_t(req_id, e));
-
             if (req.is_amo()) {
                 inflight_entry_t inflight_ret;
                 if (inflight_amo_req_m.num_available() > 1) {
@@ -1036,9 +948,6 @@ private:
                 if (!inflight_amo_req_m.nb_read(inflight_ret)) {
                     print_error("unexpected AMO request");
                     continue;
-                }
-                if (core_req == nullptr) {
-                    print_error("memory AMO request with no associated core request");
                 }
                 inflight_mem_read_m.insert(inflight_mem_map_pair_t(req_id, e));
             }
@@ -1055,9 +964,6 @@ private:
                 if (!inflight_ret.is_atomic) {
                     print_error("store exclusive access with no valid reservation");
                     continue;
-                }
-                if (core_req == nullptr) {
-                    print_error("memory store-conditional request with no associated core request");
                 }
             }
         }

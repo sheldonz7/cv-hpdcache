@@ -51,7 +51,6 @@ module hpdcache_lint
       mshrSetsPerRam: 32,
       mshrRamByteEnable: 1'b1,
       mshrUseRegbank: 1,
-      cbufEntries: 4,
       refillCoreRspFeedthrough: 1'b1,
       refillFifoDepth: 2,
       wbufDirEntries: 16,
@@ -62,11 +61,10 @@ module hpdcache_lint
       flushEntries: 4,
       flushFifoDepth: 2,
       memAddrWidth: 56,
-      memIdWidth: 7,
+      memIdWidth: 6,
       memDataWidth: 512,
       wtEn: 1'b1,
-      wbEn: 1'b1,
-      lowLatency: 1'b1
+      wbEn: 1'b1
   },
 
   localparam hpdcache_pkg::hpdcache_cfg_t HPDcacheCfg = hpdcache_pkg::hpdcacheBuildConfig(
