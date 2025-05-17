@@ -968,7 +968,17 @@ import hpdcache_pkg::*;
 //  {{{
     always_ff @(posedge clk_i)
     begin : req_ff
-        if (arb_valid && arb_ready) begin
+        if (!rst_ni) begin
+            req_q.op        <= '0;
+            req_q.addr      <= '0;
+            req_q.size      <= '0;
+            req_q.data      <= '0;
+            req_q.be        <= '0;
+            req_q.uc        <= '0;
+            req_q.sid       <= '0;
+            req_q.tid       <= '0;
+            req_q.need_rsp  <= '0;
+        end else if (arb_valid && arb_ready) begin
             req_q <= arb_req;
         end
     end

@@ -448,21 +448,41 @@ import hpdcache_pkg::*;
 
     assign cmoh_bank_last = cmoh_bank_q[HPDcacheCfg.u.nBanks - 1];
 
-    always_comb
-    begin : bank_incr_comb
-        unique if (cmoh_bank_reset) begin
-            cmoh_bank_d = hpdcache_bank_vector_t'(1);
-        end else if (cmoh_bank_set_all) begin
-            cmoh_bank_d = '1;
-        end else if (cmoh_bank_set_req) begin
-            cmoh_bank_d = req_bank_src_i;
-        end else if (cmoh_bank_incr) begin
-            cmoh_bank_d = cmoh_bank_last ?
-                hpdcache_bank_vector_t'(1) : {cmoh_bank_q[0 +: HPDcacheCfg.u.nBanks-1], 1'b0};
-        end else begin
-            cmoh_bank_d = cmoh_bank_q;
+    generate
+    if (HPDcacheCfg.u.nBanks == 1) begin : gen_single_bank
+        always_comb
+        begin : single_bank_incr_comb
+            unique if (cmoh_bank_reset) begin
+                cmoh_bank_d = hpdcache_bank_vector_t'(1); // Reset to select only bank
+            end else if (cmoh_bank_set_all) begin
+                cmoh_bank_d = '1; // Select only bank
+            end else if (cmoh_bank_set_req) begin
+                cmoh_bank_d = req_bank_src_i; // Set bank from input
+            end else if (cmoh_bank_incr) begin
+                cmoh_bank_d = hpdcache_bank_vector_t'(1); // Single bank: no rotation needed
+            end else begin
+                cmoh_bank_d = cmoh_bank_q; // Maintain current state
+            end
+        end
+    end else begin : gen_multi_bank
+        always_comb
+        begin : multi_bank_incr_comb
+            unique if (cmoh_bank_reset) begin
+                cmoh_bank_d = hpdcache_bank_vector_t'(1); // Reset to select first bank
+            end else if (cmoh_bank_set_all) begin
+                cmoh_bank_d = '1; // Select all banks
+            end else if (cmoh_bank_set_req) begin
+                cmoh_bank_d = req_bank_src_i; // Set specific bank from input
+            end else if (cmoh_bank_incr) begin
+                cmoh_bank_d = cmoh_bank_last ?
+                    hpdcache_bank_vector_t'(1) : // Reset to first bank if last bank reached
+                    {cmoh_bank_q[0 +: (HPDcacheCfg.u.nBanks-1)], 1'b0}; // Rotate right
+            end else begin
+                cmoh_bank_d = cmoh_bank_q; // Maintain current state
+            end
         end
     end
+    endgenerate
 //  }}}
 
 //  CMO request handler set state
