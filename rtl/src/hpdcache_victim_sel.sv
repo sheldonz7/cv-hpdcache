@@ -136,6 +136,47 @@ import hpdcache_pkg::*;
             .sel_victim_way_o
         );
     end
+    // else if (HPDcacheCfg.u.victimSel == HPDCACHE_VICTIM_CYCLIC2)
+    // begin : gen_cyclic2_victim_sel
+    //     hpdcache_victim_cyclic2 #(
+    //         .HPDcacheCfg (HPDcacheCfg)
+    //     ) victim_cyclic2_i(
+    //         .clk_i,
+    //         .rst_ni,
+
+    //         .updt_i,
+    //         .updt_set_i,
+    //         .updt_way_i,
+
+    //         .sel_victim_i,
+    //         .sel_dir_valid_i,
+    //         .sel_dir_wback_i,
+    //         .sel_dir_dirty_i,
+    //         .sel_dir_fetch_i,
+    //         .sel_victim_set_i,
+    //         .sel_victim_way_o
+    //     );
+    // end
+    else if (HPDcacheCfg.u.victimSel == HPDCACHE_VICTIM_RRIP)
+    begin : gen_rrip_victim_sel
+        hpdcache_victim_rrip #(
+            .HPDcacheCfg (HPDcacheCfg)
+        ) victim_rrip_i(
+            .clk_i,
+            .rst_ni,
+            .updt_i,
+            .updt_set_i,
+            .updt_way_i,
+            .sel_victim_i,
+            .sel_dir_valid_i,
+            .sel_dir_wback_i,
+            .sel_dir_dirty_i,
+            .sel_dir_fetch_i,
+            .sel_victim_set_i,
+            .sel_victim_way_o
+        );
+    end
+
 
 `ifndef HPDCACHE_ASSERT_OFF
     initial victim_sel_assert:

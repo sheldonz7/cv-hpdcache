@@ -43,7 +43,9 @@ package hpdcache_pkg;
     typedef enum logic [1:0] {
         HPDCACHE_VICTIM_RANDOM = 2'b00,
         HPDCACHE_VICTIM_PLRU   = 2'b01,
-        HPDCACHE_VICTIM_CYCLIC = 2'b10
+        HPDCACHE_VICTIM_CYCLIC = 2'b10,
+        //HPDCACHE_VICTIM_CYCLIC2= 2'b11,
+        HPDCACHE_VICTIM_RRIP   = 2'b11
     } hpdcache_victim_sel_policy_t;
     //  }}}
 

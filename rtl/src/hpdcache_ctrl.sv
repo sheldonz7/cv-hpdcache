@@ -245,6 +245,7 @@ import hpdcache_pkg::*;
     input  logic                  flush_empty_i,
 
     output logic                  rtab_empty_o,
+    output logic                  rtab_full_o,
     output logic                  ctrl_empty_o,
 
     //   Configuration signals
@@ -480,6 +481,8 @@ import hpdcache_pkg::*;
     assign st0_req_is_cmo_inval    =    is_cmo_inval(st0_req.op);
     assign st0_req_is_cmo_prefetch = is_cmo_prefetch(st0_req.op);
     //  }}}
+
+    assign rtab_full_o = rtab_full;
 
     //  Decode operation in stage 1
     //  {{{

@@ -126,6 +126,9 @@ import hpdcache_pkg::*;
     output logic                          evt_rtab_rollback_o,
     output logic                          evt_stall_refill_o,
     output logic                          evt_stall_o,
+    output logic                          evt_mshr_full_o,
+    output logic                          evt_rtab_full_o,
+    output logic                          evt_wbuf_full_o,
 
     //      Status interface
     output logic                          wbuf_empty_o,
@@ -650,6 +653,7 @@ import hpdcache_pkg::*;
         .flush_empty_i                      (flush_empty),
 
         .rtab_empty_o                       (rtab_empty),
+        .rtab_full_o                        (evt_rtab_full_o),
         .ctrl_empty_o                       (ctrl_empty),
 
         .cfg_enable_i,
@@ -687,7 +691,7 @@ import hpdcache_pkg::*;
             .rst_ni,
 
             .empty_o                            (wbuf_empty_o),
-            .full_o                             (/* unused */),
+            .full_o                             (evt_wbuf_full_o),
             .flush_all_i                        (wbuf_flush_all),
 
             .cfg_threshold_i                    (cfg_wbuf_threshold_i),
@@ -773,7 +777,7 @@ import hpdcache_pkg::*;
         .rst_ni,
 
         .mshr_empty_o                       (miss_mshr_empty),
-        .mshr_full_o                        (/* unused */),
+        .mshr_full_o                        (evt_mshr_full_o),
 
         .cfg_prefetch_updt_sel_victim_i     (cfg_prefetch_updt_plru_i),
 
